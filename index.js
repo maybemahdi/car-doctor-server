@@ -16,6 +16,31 @@ app.use(
 app.use(express.json());
 app.use(cookieParser());
 
+// my middlewares
+const logger = async (req, res, next) => {
+  console.log("called:", req.hostname, req.originalUrl);
+  next();
+};
+
+const verifyToken = async (req, res, next) => {
+  const token = req.cookies?.token;
+  console.log("value of token in middleware:", token);
+  if (!token) {
+    return res.status(401).send({ message: "You do not have access" });
+  }
+  jwt.verify(token, process.env.ACCESS_TOKEN_SECRET, (err, decoded) => {
+    // error
+    if (err) {
+      console.log(err);
+      return res.status(401).send({ message: "Unauthorized" });
+    }
+    //if valid? then decode
+    console.log("value in the token:", decoded);
+    req.user = decoded;
+    next();
+  });
+};
+
 const { MongoClient, ServerApiVersion, ObjectId } = require("mongodb");
 const uri = `mongodb+srv://${process.env.DB_USER}:${process.env.DB_PASS}@cluster0.nrdgddr.mongodb.net/?retryWrites=true&w=majority&appName=Cluster0`;
 
@@ -36,7 +61,7 @@ async function run() {
     const bookingCollection = client.db("carDoctor").collection("bookings");
 
     // auth related api
-    app.post("/jwt", async (req, res) => {
+    app.post("/jwt", logger, async (req, res) => {
       const user = req.body;
       console.log(user);
       const token = jwt.sign(user, process.env.ACCESS_TOKEN_SECRET, {
@@ -52,7 +77,7 @@ async function run() {
     });
 
     //crud for services
-    app.get("/services", async (req, res) => {
+    app.get("/services", logger, async (req, res) => {
       const result = await servicesCollection.find().toArray();
       res.send(result);
     });
@@ -75,9 +100,13 @@ async function run() {
     //   res.send(result);
     // });
 
-    app.get("/bookings", async (req, res) => {
+    app.get("/bookings", logger, verifyToken, async (req, res) => {
       let query = {};
-      console.log("token read", req.cookies.token);
+      // console.log("token:", req.cookies.token);
+      console.log("verified user from valid token:", req.user)
+      if(req.query?.email !== req.user.email){
+        return res.status(401).send({message: "Forbidded Access"})
+      }
       if (req.query.email) {
         query = { email: req.query.email };
       }
