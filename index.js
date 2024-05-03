@@ -46,7 +46,7 @@ async function run() {
         .cookie("token", token, {
           httpOnly: true,
           secure: false,
-          sameSite: "none",
+          // sameSite: "none",
         })
         .send({ success: true });
     });
@@ -77,6 +77,7 @@ async function run() {
 
     app.get("/bookings", async (req, res) => {
       let query = {};
+      console.log("token read", req.cookies.token);
       if (req.query.email) {
         query = { email: req.query.email };
       }
