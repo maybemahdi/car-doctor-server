@@ -1,7 +1,7 @@
 const express = require("express");
 const cors = require("cors");
-const jwt = require("jsonwebtoken");
 const cookieParser = require("cookie-parser");
+const jwt = require("jsonwebtoken");
 const app = express();
 const port = process.env.PORT || 5000;
 require("dotenv").config();
@@ -9,7 +9,7 @@ require("dotenv").config();
 //middleware
 app.use(
   cors({
-    origin: ["http://localhost:5173", "http://localhost:5174"],
+    origin: ["http://localhost:5173", "http://localhost:5174", "https://car-doctor-e553a.web.app", "https://car-doctor-e553a.firebaseapp.com"],
     credentials: true,
   })
 );
@@ -17,25 +17,15 @@ app.use(express.json());
 app.use(cookieParser());
 
 // my middlewares
-const logger = async (req, res, next) => {
-  console.log("called:", req.hostname, req.originalUrl);
-  next();
-};
-
-const verifyToken = async (req, res, next) => {
+const verifyToken = (req, res, next) => {
   const token = req.cookies?.token;
-  console.log("value of token in middleware:", token);
   if (!token) {
-    return res.status(401).send({ message: "You do not have access" });
+    return res.status(401).send({ message: "Unauthorized Access" });
   }
   jwt.verify(token, process.env.ACCESS_TOKEN_SECRET, (err, decoded) => {
-    // error
     if (err) {
-      console.log(err);
-      return res.status(401).send({ message: "Unauthorized" });
+      return res.status(401).send({ message: "Unauthorized Access" });
     }
-    //if valid? then decode
-    console.log("value in the token:", decoded);
     req.user = decoded;
     next();
   });
@@ -61,23 +51,28 @@ async function run() {
     const bookingCollection = client.db("carDoctor").collection("bookings");
 
     // auth related api
-    app.post("/jwt", logger, async (req, res) => {
+    app.post("/jwt", async (req, res) => {
       const user = req.body;
-      console.log(user);
       const token = jwt.sign(user, process.env.ACCESS_TOKEN_SECRET, {
         expiresIn: "1h",
       });
       res
         .cookie("token", token, {
           httpOnly: true,
-          secure: false,
-          // sameSite: "none",
+          secure: true,
+          sameSite: "none",
         })
         .send({ success: true });
     });
 
+    app.post("/logout", async (req, res) => {
+      const user = req.body;
+      console.log("login out user", user);
+      res.clearCookie("token", { maxAge: 0 }).send({ success: true });
+    });
+
     //crud for services
-    app.get("/services", logger, async (req, res) => {
+    app.get("/services", async (req, res) => {
       const result = await servicesCollection.find().toArray();
       res.send(result);
     });
@@ -100,12 +95,12 @@ async function run() {
     //   res.send(result);
     // });
 
-    app.get("/bookings", logger, verifyToken, async (req, res) => {
+    app.get("/bookings", verifyToken, async (req, res) => {
       let query = {};
-      // console.log("token:", req.cookies.token);
-      console.log("verified user from valid token:", req.user)
-      if(req.query?.email !== req.user.email){
-        return res.status(401).send({message: "Forbidded Access"})
+      // console.log(req.cookies.token)
+      console.log(req.user)
+      if(req.user.email !== req.query.email){
+        return res.status(403).send("Forbidden Access");
       }
       if (req.query.email) {
         query = { email: req.query.email };
